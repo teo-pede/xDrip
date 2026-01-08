@@ -656,9 +656,38 @@ public class Notifications extends IntentService {
                 b.setWhen(lastReading.timestamp);
                 b.setShowWhen(true);
 
-                final SpannableString deltaString = new SpannableString("Delta: " + ((dg != null) ? (dg.spannableString(dg.unitized_delta + (dg.from_plugin ? " " + context.getString(R.string.p_in_circle) : "")))
-                        : bgGraphBuilder.unitizedDeltaString(true, true)));
+                // Compute estimate and delta using same logic as the home-screen widget
+                double estimate = 0;
+                double estimated_delta = -9999;
+                String slope_arrow = "";
+                BgReading lastBgreading = BgReading.lastNoSenssor();
+                if (lastBgreading != null) {
+                    estimate = (dg != null) ? dg.mgdl : lastBgreading.calculated_value;
+                    slope_arrow = (dg != null) ? dg.delta_arrow : lastBgreading.slopeArrow();
 
+                    if (dg == null) {
+                        if (BestGlucose.compensateNoise()) {
+                            estimate = BgGraphBuilder.best_bg_estimate;
+                            estimated_delta = BgGraphBuilder.best_bg_estimate - BgGraphBuilder.last_bg_estimate;
+                            slope_arrow = BgReading.slopeToArrowSymbol(estimated_delta / (BgGraphBuilder.DEXCOM_PERIOD / 60000));
+                        }
+                        if (Pref.getBooleanDefaultFalse("display_glucose_from_plugin") && (PluggableCalibration.getCalibrationPluginFromPreferences() != null)) {
+                            // indicate plugin source in title/delta if desired (widget adds a symbol)
+                        }
+                    } else {
+                        estimated_delta = dg.delta_mgdl;
+                        if (dg.warning > 1) slope_arrow = "";
+                    }
+                }
+
+                String deltaDisplay;
+                if (estimated_delta == -9999) {
+                    deltaDisplay = bgGraphBuilder.unitizedDeltaString(true, true);
+                } else {
+                    deltaDisplay = bgGraphBuilder.unitizedDeltaStringRaw(true, true, estimated_delta);
+                }
+
+                final SpannableString deltaString = new SpannableString("Delta: " + deltaDisplay);
                 b.setContentText(deltaString);
 
                 notifiationBitmap = new BgSparklineBuilder(mContext)

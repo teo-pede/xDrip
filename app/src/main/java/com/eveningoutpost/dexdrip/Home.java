@@ -3048,10 +3048,10 @@ public class Home extends ActivityWithMenu implements ActivityCompat.OnRequestPe
 
     private void displayCurrentInfoFromReading(BgReading lastBgReading, boolean predictive) {
         double estimate = 0;
-        double estimated_delta = 0;
+        double estimated_delta = -9999;
         if (lastBgReading == null) return;
         final BestGlucose.DisplayGlucose dg = BestGlucose.getDisplayGlucose();
-        if (dg == null) return;
+        // allow dg to be null here and follow widget logic (use compensateNoise path when dg==null)
         //String slope_arrow = lastBgReading.slopeArrow();
         String slope_arrow = dg.delta_arrow;
         String extrastring = "";
@@ -3075,36 +3075,43 @@ public class Home extends ActivityWithMenu implements ActivityCompat.OnRequestPe
                 notificationText.setTextColor(Color.WHITE);
             }
             boolean bg_from_filtered = Pref.getBoolean("bg_from_filtered", false);
-            if (!predictive) {
-                //estimate = lastBgReading.calculated_value; // normal
-                estimate = dg.mgdl;
-                currentBgValueText.setTypeface(null, Typeface.NORMAL);
+                if (!predictive) {
+                    //estimate = lastBgReading.calculated_value; // normal
+                    estimate = (dg != null) ? dg.mgdl : lastBgReading.calculated_value;
+                    currentBgValueText.setTypeface(null, Typeface.NORMAL);
 
-                // if noise has settled down then switch off filtered mode
-                if ((bg_from_filtered) && (BgGraphBuilder.last_noise < BgGraphBuilder.NOISE_FORGIVE) && (Pref.getBoolean("bg_compensate_noise", false))) {
-                    bg_from_filtered = false;
-                    Pref.setBoolean("bg_from_filtered", false);
-                }
-
-                // TODO this should be partially already be covered by dg - recheck
-                if (BestGlucose.compensateNoise()) {
-                    estimate = BgGraphBuilder.best_bg_estimate; // this maybe needs scaling based on noise intensity
-                    estimated_delta = BgGraphBuilder.best_bg_estimate - BgGraphBuilder.last_bg_estimate;
-                    slope_arrow = BgReading.slopeToArrowSymbol(estimated_delta / (BgGraphBuilder.DEXCOM_PERIOD / 60000)); // delta by minute
-                    currentBgValueText.setTypeface(null, Typeface.ITALIC);
-                    extrastring = "\u26A0"; // warning symbol !
-
-                    if ((BgGraphBuilder.last_noise > BgGraphBuilder.NOISE_HIGH) && (DexCollectionType.hasFiltered())) {
-                        bg_from_filtered = true; // force filtered mode
+                    // if noise has settled down then switch off filtered mode
+                    if ((bg_from_filtered) && (BgGraphBuilder.last_noise < BgGraphBuilder.NOISE_FORGIVE) && (Pref.getBoolean("bg_compensate_noise", false))) {
+                        bg_from_filtered = false;
+                        Pref.setBoolean("bg_from_filtered", false);
                     }
-                }
 
-                if (bg_from_filtered) {
-                    currentBgValueText.setPaintFlags(currentBgValueText.getPaintFlags() | Paint.UNDERLINE_TEXT_FLAG);
-                    estimate = lastBgReading.filtered_calculated_value;
-                } else {
-                    currentBgValueText.setPaintFlags(currentBgValueText.getPaintFlags() & ~Paint.UNDERLINE_TEXT_FLAG);
-                }
+                    // Follow widget logic: if we have a DisplayGlucose (dg) use its delta; otherwise, if compensateNoise is enabled use best estimate
+                    if (dg == null) {
+                        if (BestGlucose.compensateNoise()) {
+                            estimate = BgGraphBuilder.best_bg_estimate; // this maybe needs scaling based on noise intensity
+                            estimated_delta = BgGraphBuilder.best_bg_estimate - BgGraphBuilder.last_bg_estimate;
+                            slope_arrow = BgReading.slopeToArrowSymbol(estimated_delta / (BgGraphBuilder.DEXCOM_PERIOD / 60000)); // delta by minute
+                            currentBgValueText.setTypeface(null, Typeface.ITALIC);
+                            extrastring = "\u26A0"; // warning symbol !
+
+                            if ((BgGraphBuilder.last_noise > BgGraphBuilder.NOISE_HIGH) && (DexCollectionType.hasFiltered())) {
+                                bg_from_filtered = true; // force filtered mode
+                            }
+                        }
+                    } else {
+                        estimated_delta = dg.delta_mgdl;
+                        // TODO properly illustrate + standardize warning level
+                        if (dg.warning > 1) slope_arrow = "";
+                        extrastring = " " + dg.extra_string + ((dg.from_plugin) ? " " + getString(R.string.p_in_circle) : "");
+                    }
+
+                    if (bg_from_filtered) {
+                        currentBgValueText.setPaintFlags(currentBgValueText.getPaintFlags() | Paint.UNDERLINE_TEXT_FLAG);
+                        estimate = lastBgReading.filtered_calculated_value;
+                    } else {
+                        currentBgValueText.setPaintFlags(currentBgValueText.getPaintFlags() & ~Paint.UNDERLINE_TEXT_FLAG);
+                    }
                 String stringEstimate = bgGraphBuilder.unitized_string(estimate);
                 if ((lastBgReading.hide_slope) || (bg_from_filtered)) {
                     slope_arrow = "";
@@ -3142,21 +3149,18 @@ public class Home extends ActivityWithMenu implements ActivityCompat.OnRequestPe
 
         // do we actually need to do this query here if we again do it in unitizedDeltaString
         List<BgReading> bgReadingList = BgReading.latest(2, is_follower);
-        if (bgReadingList != null && bgReadingList.size() == 2) {
-            // same logic as in xDripWidget (refactor that to BGReadings to avoid redundancy / later inconsistencies)?
-
-            //display_delta = bgGraphBuilder.unitizedDeltaString(true, true, is_follower);
-            display_delta = dg.unitized_delta;
-            if (BestGlucose.compensateNoise()) {
-                //final double estimated_delta = BgGraphBuilder.best_bg_estimate - BgGraphBuilder.last_bg_estimate;
-                display_delta = bgGraphBuilder.unitizedDeltaStringRaw(true, true, estimated_delta);
-                addDisplayDelta();
-                if (!Pref.getBoolean("show_noise_workings", false)) {
-                    notificationText.append("\n" + String.format(gs(R.string.noise_workings_noise), bgGraphBuilder.noiseString(BgGraphBuilder.last_noise)));
-                }
+        if (estimated_delta == -9999) {
+            if (bgReadingList != null && bgReadingList.size() == 2) {
+                display_delta = bgGraphBuilder.unitizedDeltaString(true, true, is_follower);
             } else {
-                addDisplayDelta();
+                display_delta = "--";
             }
+        } else {
+            display_delta = bgGraphBuilder.unitizedDeltaStringRaw(true, true, estimated_delta);
+        }
+        addDisplayDelta();
+        if ((BestGlucose.compensateNoise()) && (!Pref.getBoolean("show_noise_workings", false))) {
+            notificationText.append("\n" + String.format(gs(R.string.noise_workings_noise), bgGraphBuilder.noiseString(BgGraphBuilder.last_noise)));
         }
         if (bgGraphBuilder.unitized(estimate) <= bgGraphBuilder.lowMark) {
             currentBgValueText.setTextColor(getCol(ColorCache.X.color_low_bg_values));
