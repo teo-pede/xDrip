@@ -25,10 +25,11 @@ import androidx.core.app.NotificationManagerCompat;
 import android.text.SpannableString;
 import android.widget.RemoteViews;
 
+import com.eveningoutpost.dexdrip.EditAlertActivity;
+import com.eveningoutpost.dexdrip.calibrations.PluggableCalibration;
 import com.eveningoutpost.dexdrip.AddCalibration;
 import com.eveningoutpost.dexdrip.BestGlucose;
 import com.eveningoutpost.dexdrip.DoubleCalibrationActivity;
-import com.eveningoutpost.dexdrip.EditAlertActivity;
 import com.eveningoutpost.dexdrip.Home;
 import com.eveningoutpost.dexdrip.models.ActiveBgAlert;
 import com.eveningoutpost.dexdrip.models.AlertType;
@@ -50,6 +51,7 @@ import com.eveningoutpost.dexdrip.utils.PowerStateReceiver;
 import com.eveningoutpost.dexdrip.wearintegration.Amazfitservice;
 import com.eveningoutpost.dexdrip.services.broadcastservice.BroadcastEntry;
 import com.eveningoutpost.dexdrip.xdrip;
+import com.eveningoutpost.dexdrip.BestGlucose;
 
 import java.util.Date;
 import java.util.List;
